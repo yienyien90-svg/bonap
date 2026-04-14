@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { getEnv, getIngressBasename } from "../../shared/utils/env.ts"
-import { Eye, EyeOff, CheckCircle2, XCircle, Loader2, Check, Sun, Moon, Monitor, Palette, Bot, Server, Info, Lock, AlertTriangle, LogOut, ExternalLink, Github, Globe, ChevronDown } from "lucide-react"
+import { Eye, EyeOff, CheckCircle2, XCircle, Loader2, Check, Sun, Moon, Monitor, Palette, Bot, Server, Info, Lock, AlertTriangle, LogOut, ExternalLink, Github, Globe, ChevronDown, RefreshCw, Users, Minus, Plus } from "lucide-react"
 import { Button } from "../components/ui/button.tsx"
 import { Input } from "../components/ui/input.tsx"
 import { Label } from "../components/ui/label.tsx"
@@ -9,6 +9,7 @@ import { llmConfigService, getLLMEnvFields } from "../../infrastructure/llm/LLMC
 import type { LLMConfig, LLMProvider } from "../../shared/types/llm.ts"
 import { LLM_PROVIDERS } from "../../shared/types/llm.ts"
 import { useTheme } from "../hooks/useTheme.ts"
+import { useFamilySize } from "../hooks/useFamilySize.ts"
 import { ACCENT_COLORS } from "../../infrastructure/theme/ThemeService.ts"
 import type { Theme } from "../../infrastructure/theme/ThemeService.ts"
 import { cn } from "../../lib/utils.ts"
@@ -94,6 +95,7 @@ function CollapsibleSection({ icon, iconBg, title, subtitle, defaultOpen = false
 
 export function SettingsPage() {
   const { theme, setTheme, accentColor, setAccentColor } = useTheme()
+  const { familySize, setFamilySize } = useFamilySize()
   const navigate = useNavigate()
   const [config, setConfig] = useState<LLMConfig>(() => llmConfigService.load())
   const envFields = getLLMEnvFields()
@@ -161,6 +163,23 @@ export function SettingsPage() {
       localStorage.removeItem('bonap-mealie-token')
       window.__ENV__ = undefined
       navigate('/login', { replace: true })
+    }
+  }
+
+  const handleFetchModels = async () => {
+    if (!config.ollamaBaseUrl) return
+    setIsFetchingModels(true)
+    try {
+      const models = await llmConfigService.fetchModels(config)
+      if (models.length > 0) {
+        setAvailableModels(models)
+        setConfig((prev) => ({
+          ...prev,
+          model: models.includes(prev.model) ? prev.model : models[0],
+        }))
+      }
+    } finally {
+      setIsFetchingModels(false)
     }
   }
 
@@ -236,6 +255,49 @@ export function SettingsPage() {
                 )}
               </button>
             ))}
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* ── Foyer ── */}
+      <CollapsibleSection
+        icon={<Users className="h-4 w-4 text-[oklch(0.52_0.16_255)]" />}
+        iconBg="bg-[oklch(0.92_0.04_255)] dark:bg-[oklch(0.25_0.04_255)]"
+        title="Foyer"
+        subtitle="Nombre de personnes par défaut pour la planification"
+      >
+        <div className="space-y-2.5">
+          <Label>Taille du foyer</Label>
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => setFamilySize(familySize - 1)}
+              disabled={familySize <= 1}
+              aria-label="Diminuer la taille du foyer"
+            >
+              <Minus className="h-4 w-4" />
+            </Button>
+            <Input
+              type="number"
+              min={1}
+              max={99}
+              value={familySize}
+              onChange={(e) => setFamilySize(Number(e.target.value || 1))}
+              className="w-24 text-center font-semibold"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => setFamilySize(familySize + 1)}
+              disabled={familySize >= 99}
+              aria-label="Augmenter la taille du foyer"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+            <span className="text-sm text-muted-foreground">personnes</span>
           </div>
         </div>
       </CollapsibleSection>
@@ -399,24 +461,48 @@ export function SettingsPage() {
                   envFields.has('ollamaBaseUrl') && 'bg-secondary/40',
                 )}
               />
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleFetchModels}
+                  disabled={isFetchingModels || !config.ollamaBaseUrl}
+                  className="gap-1.5"
+                  title="Récupérer la liste des modèles depuis Ollama"
+                >
+                  {isFetchingModels ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  Récupérer les modèles
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Utilise l'URL ci-dessus pour appeler <code className="rounded bg-secondary px-1 py-0.5">/api/tags</code>.
+                </span>
+              </div>
             </div>
-            <div className="space-y-2.5">
-              <Label htmlFor="ollama-model">Modèle</Label>
-              <Input
-                id="ollama-model"
-                type="text"
-                placeholder="llama3.2, mistral, …"
-                value={config.model}
-                onChange={(e) =>
-                  setConfig((prev) => ({ ...prev, model: e.target.value }))
-                }
-              />
-            </div>
+
+            {availableModels.length === 0 && (
+              <div className="space-y-2.5">
+                <Label htmlFor="ollama-model">Modèle</Label>
+                <Input
+                  id="ollama-model"
+                  type="text"
+                  placeholder="llama3.2, mistral, …"
+                  value={config.model}
+                  onChange={(e) =>
+                    setConfig((prev) => ({ ...prev, model: e.target.value }))
+                  }
+                />
+              </div>
+            )}
           </div>
         )}
 
         {/* Sélecteur de modèle */}
-        {config.provider !== 'ollama' && availableModels.length > 0 && (
+        {availableModels.length > 0 && (
           <div className="space-y-2.5">
             <div className="flex items-center gap-2">
               <Label>Modèle</Label>
